@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -96,16 +95,8 @@ func main() {
 	mux.Handle("/media/", http.StripPrefix("/media/", http.FileServer(http.Dir(filepath.Join(data, "assets")))))
 	mux.Handle("/", http.FileServer(http.Dir(filepath.Join(root, "frontend", "dist"))))
 	addr := env("LOCALDREAM_ADDR", "127.0.0.1:8790")
-	publicUser := os.Getenv("LOCALDREAM_PUBLIC_USER")
-	publicPassword := os.Getenv("LOCALDREAM_PUBLIC_PASSWORD")
-	if (publicUser == "") != (publicPassword == "") {
-		log.Fatal("LOCALDREAM_PUBLIC_USER and LOCALDREAM_PUBLIC_PASSWORD must be set together")
-	}
 	log.Printf("Local Dream listening at http://%s", addr)
-	if publicUser != "" {
-		log.Print("HTTP Basic Auth is enabled")
-	}
-	log.Fatal(http.ListenAndServe(addr, basicAuth(publicUser, publicPassword, cors(mux))))
+	log.Fatal(http.ListenAndServe(addr, cors(mux)))
 }
 
 func env(k, fallback string) string {
@@ -127,22 +118,6 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-func basicAuth(user, password string, next http.Handler) http.Handler {
-	if user == "" {
-		return next
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		providedUser, providedPassword, ok := r.BasicAuth()
-		validUser := subtle.ConstantTimeCompare([]byte(providedUser), []byte(user)) == 1
-		validPassword := subtle.ConstantTimeCompare([]byte(providedPassword), []byte(password)) == 1
-		if !ok || !validUser || !validPassword {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Local Dream"`)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
