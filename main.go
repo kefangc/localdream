@@ -46,20 +46,43 @@ type ProviderConfig struct {
 	APIKey  string `json:"api_key"`
 	Model   string `json:"model"`
 }
+
+type generationRequest struct {
+	Mode         string   `json:"mode"`
+	Prompt       string   `json:"prompt"`
+	AspectRatio  string   `json:"aspect_ratio"`
+	Resolution   string   `json:"resolution"`
+	Duration     float64  `json:"duration"`
+	Steps        int      `json:"steps"`
+	Lora         string   `json:"lora"`
+	LoraStrength float64  `json:"lora_strength"`
+	AssetIDs     []string `json:"asset_ids"`
+	UseAgent     bool     `json:"use_agent"`
+}
+
 type Server struct {
-	mu       sync.RWMutex
-	assets   []Asset
-	jobs     []Generation
-	seq      int
-	root     string
-	comfyURL string
+	mu         sync.RWMutex
+	assets     []Asset
+	jobs       []Generation
+	seq        int
+	root       string
+	comfyURL   string
+	comfyInput string
+	httpClient *http.Client
 }
 
 func main() {
 	root, _ := os.Getwd()
 	data := filepath.Join(root, "data")
 	_ = os.MkdirAll(filepath.Join(data, "assets"), 0755)
-	s := &Server{root: root, comfyURL: env("LOCALDREAM_ADAPTER_URL", "http://127.0.0.1:8791"), assets: []Asset{}, jobs: []Generation{}}
+	s := &Server{
+		root:       root,
+		comfyURL:   env("COMFYUI_URL", "http://127.0.0.1:8188"),
+		comfyInput: env("COMFYUI_INPUT", `D:\Comfy-Desktop\ComfyUI-Shared\input`),
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		assets:     []Asset{},
+		jobs:       []Generation{},
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/assets", s.assetsHandler)
 	mux.HandleFunc("/api/assets/", s.deleteAssetHandler)
@@ -190,18 +213,7 @@ func (s *Server) generationsHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 		return
 	}
-	var in struct {
-		Mode         string   `json:"mode"`
-		Prompt       string   `json:"prompt"`
-		AspectRatio  string   `json:"aspect_ratio"`
-		Resolution   string   `json:"resolution"`
-		Duration     float64  `json:"duration"`
-		Steps        int      `json:"steps"`
-		Lora         string   `json:"lora"`
-		LoraStrength float64  `json:"lora_strength"`
-		AssetIDs     []string `json:"asset_ids"`
-		UseAgent     bool     `json:"use_agent"`
-	}
+	var in generationRequest
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid JSON"})
 		return
@@ -236,10 +248,10 @@ func (s *Server) generationsHandler(w http.ResponseWriter, r *http.Request) {
 	g := Generation{ID: id, Mode: in.Mode, Status: "queued", Prompt: in.Prompt, Duration: in.Duration, AspectRatio: in.AspectRatio, Resolution: in.Resolution, Steps: in.Steps, Lora: in.Lora, LoraStrength: in.LoraStrength, AssetIDs: in.AssetIDs, Progress: 0, CreatedAt: now, UpdatedAt: now}
 	s.jobs = append([]Generation{g}, s.jobs...)
 	s.mu.Unlock()
-	go s.runJob(id, in.Mode, in.Prompt, in.Duration, in.AspectRatio, in.Resolution, in.Steps, in.Lora, in.LoraStrength, in.AssetIDs)
+	go s.runJob(id, in)
 	writeJSON(w, 202, g)
 }
-func (s *Server) runJob(id, mode, prompt string, duration float64, ratio, resolution string, steps int, lora string, loraStrength float64, assetIDs []string) {
+func (s *Server) runJob(id string, in generationRequest) {
 	for _, p := range []int{8, 18} {
 		time.Sleep(250 * time.Millisecond)
 		if s.jobCancelled(id) {
@@ -250,36 +262,23 @@ func (s *Server) runJob(id, mode, prompt string, duration float64, ratio, resolu
 	if s.jobCancelled(id) {
 		return
 	}
-	payload := map[string]any{"prompt": prompt, "mode": mode, "duration": duration, "aspect_ratio": ratio, "resolution": resolution, "steps": steps, "lora": lora, "lora_strength": loraStrength, "asset_ids": assetIDs}
-	b, _ := json.Marshal(payload)
-	req, _ := http.NewRequest(http.MethodPost, s.comfyURL+"/api/localdream/submit", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	compiled, err := s.compilePrompt(in)
 	if err != nil {
-		if s.jobCancelled(id) {
-			return
-		}
-		s.updateJob(id, "failed", 0, "ComfyUI 未连接："+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		if s.jobCancelled(id) {
-			return
-		}
-		body, _ := io.ReadAll(resp.Body)
-		s.updateJob(id, "failed", 0, "适配层错误："+string(body))
+		s.updateJob(id, "failed", 18, "工作流编译失败："+err.Error())
 		return
 	}
 	var out struct {
-		PromptID  string `json:"prompt_id"`
-		Status    string `json:"status"`
-		OutputURL string `json:"output_url"`
-		Error     string `json:"error"`
+		PromptID string `json:"prompt_id"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if err := s.comfyJSON(http.MethodPost, "/prompt", compiled, &out); err != nil {
+		if s.jobCancelled(id) {
+			return
+		}
+		s.updateJob(id, "failed", 0, "ComfyUI 提交失败："+err.Error())
+		return
+	}
 	if out.PromptID == "" {
-		s.updateJob(id, "failed", 18, "适配层未返回 ComfyUI prompt_id")
+		s.updateJob(id, "failed", 18, "ComfyUI 未返回 prompt_id")
 		return
 	}
 	s.updateJob(id, "running", 20, "")
@@ -288,35 +287,14 @@ func (s *Server) runJob(id, mode, prompt string, duration float64, ratio, resolu
 		if s.jobCancelled(id) {
 			return
 		}
-		statusReq, err := http.NewRequest(http.MethodGet, s.comfyURL+"/api/localdream/status/"+out.PromptID, nil)
-		if err == nil {
-			statusResp, statusErr := http.DefaultClient.Do(statusReq)
-			if statusErr == nil {
-				var state struct {
-					Status    string `json:"status"`
-					Progress  int    `json:"progress"`
-					OutputURL string `json:"output_url"`
-					Error     string `json:"error"`
-				}
-				_ = json.NewDecoder(statusResp.Body).Decode(&state)
-				statusResp.Body.Close()
-				if state.Status == "failed" {
-					s.updateJob(id, "failed", state.Progress, "ComfyUI 生成失败："+state.Error)
-					return
-				}
-				if state.Status == "completed" {
-					s.completeJob(id, state.OutputURL)
-					return
-				}
-				progress := state.Progress
-				if progress < 20 {
-					progress = 20
-				}
-				if progress > 99 {
-					progress = 99
-				}
-				s.updateJob(id, "running", progress, "")
-			}
+		state, done, failed, outputURL, err := s.comfyResult(out.PromptID)
+		if err == nil && failed {
+			s.updateJob(id, "failed", 20, "ComfyUI 生成失败："+state)
+			return
+		}
+		if err == nil && done {
+			s.completeJob(id, outputURL)
+			return
 		}
 		time.Sleep(time.Second)
 	}

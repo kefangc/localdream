@@ -18,6 +18,6 @@ data/provider.json
 data/*.db
 data/*.sqlite
 
-# Python bytecode
+# Stale interpreter cache from the removed legacy adapter.
 __pycache__/
 *.py[cod]
