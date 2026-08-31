@@ -1,0 +1,23 @@
+# Editor and IDE state
+.idea/
+.vscode/
+
+# Go build output
+localdream.exe
+localdream.exe~
+*.test
+coverage.out
+
+# Frontend dependencies and production output
+frontend/node_modules/
+frontend/dist/
+
+# Runtime state, generated media, and local secrets
+data/assets/
+data/provider.json
+data/*.db
+data/*.sqlite
+
+# Python bytecode
+__pycache__/
+*.py[cod]

@@ -1,0 +1,38 @@
+{
+  "id": "h3-normal",
+  "name": "MiniMax H3 本地模板",
+  "source": "E:/H3/工作流/▶▷MiniMaxH3-正常.json",
+  "modes": {
+    "text_to_video": {
+      "group_id": 6, "group_index": 1, "prompt_node": 194, "output_node": 193, "duration_node": 199, "resolution_node": 200,
+      "unet_node": 214, "unet_model": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "asset_nodes": [],
+      "accelerations": {
+        "fl2v_4": {"label": "FL2V 4 步 LoRA", "lora_name": "minimax_h3_fl2v_lightx2v_turbo_4step_v1.0_768p_resized_avg_rank_31_bf16.safetensors", "steps": 4},
+        "fl2v_8": {"label": "FL2V 8 步 LoRA", "lora_name": "minimax_h3_fl2v_lightx2v_turbo_8step_v1.0_resized_avg_rank_24_bf16.safetensors", "steps": 8}
+      }
+    },
+    "image_to_video": {
+      "group_id": 5, "group_index": 0, "prompt_node": 133, "output_node": 189, "duration_node": 135, "resolution_node": 115,
+      "unet_node": 129, "unet_model": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "asset_nodes": [114],
+      "accelerations": {
+        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4}
+      }
+    },
+    "first_last_frame": {
+      "group_id": 8, "group_index": 3, "prompt_node": 259, "output_node": 258, "duration_node": 270, "resolution_node": 265,
+      "unet_node": 276, "unet_model": "minimax_h3_fl2va_pruned_int8_convrot.safetensors", "asset_nodes": [275, 282],
+      "accelerations": {
+        "fl2v_4": {"label": "FL2V 4 步 LoRA", "lora_name": "minimax_h3_fl2v_lightx2v_turbo_4step_v1.0_768p_resized_avg_rank_31_bf16.safetensors", "steps": 4},
+        "fl2v_8": {"label": "FL2V 8 步 LoRA", "lora_name": "minimax_h3_fl2v_lightx2v_turbo_8step_v1.0_resized_avg_rank_24_bf16.safetensors", "steps": 8}
+      }
+    },
+    "multi_reference_video": {
+      "group_id": 9, "group_index": 4, "prompt_node": 316, "output_node": 285, "duration_node": 292, "resolution_node": 290,
+      "unet_node": 305, "unet_model": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "asset_nodes": [308, 295],
+      "accelerations": {
+        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4, "te_speed_mode": "4-step LoRA"}
+      }
+    }
+  },
+  "constraints": {"max_reference_images": 9, "max_reference_videos": 3, "duration_seconds": [5, 15], "resolution": ["480p", "720p"]}
+}
