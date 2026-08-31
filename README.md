@@ -23,6 +23,21 @@ $env:LOCALDREAM_ADDR='127.0.0.1:8790' # 可选，Local Dream 监听地址
 
 前端开发模式可用 `npm run dev`，地址为 `http://127.0.0.1:5174`。
 
+## 公网部署
+
+生产前端由 Go 在同一端口提供，不要将 Vite 开发服务器 `5174` 暴露到公网。默认监听地址 `127.0.0.1:8790` 仅允许本机访问；公网发布时，使用下面的环境变量启动：
+
+```powershell
+$env:LOCALDREAM_ADDR='0.0.0.0:8790'
+$env:LOCALDREAM_PUBLIC_USER='localdream'
+$env:LOCALDREAM_PUBLIC_PASSWORD='替换为随机的长密码'
+go run .
+```
+
+同时在 Windows 防火墙中只开放 TCP 8790，并在路由器中将外网 TCP 8790 转发到本机的局域网 IP。公网入口会显示浏览器的 HTTP Basic Auth 登录框；没有同时设置账号和密码时，服务不会启用登录保护。不要公开 `8188`（ComfyUI）或 `5174`（Vite 开发服务器）。
+
+若计划长期对公网开放，应在反向代理上配置域名和 HTTPS；HTTP Basic Auth 仅适合小范围、临时的个人访问。
+
 当前 H3 模板副本位于 `templates/h3/`。Go 会把画布工作流编译为 ComfyUI `/prompt` 所需的 API 节点图，再轮询 `/history/{prompt_id}` 获取完成状态与输出视频 URL。
 
 ## 验证
