@@ -152,6 +152,9 @@ func (s *Server) compilePrompt(payload generationRequest) (comfyPrompt, error) {
 		}
 		graph[id] = comfyNode{ClassType: node.Type, Inputs: inputs, Meta: map[string]any{"title": fallback(node.Title, node.Type)}}
 	}
+	if err := s.normalizeModelInputs(graph); err != nil {
+		return comfyPrompt{}, err
+	}
 
 	promptID := strconv.Itoa(mode.PromptNode)
 	if node, ok := graph[promptID]; ok {
@@ -227,6 +230,9 @@ func (s *Server) requiredInputs(classType string) ([]string, error) {
 		Input struct {
 			Required map[string]any `json:"required"`
 		} `json:"input"`
+		InputOrder struct {
+			Required []string `json:"required"`
+		} `json:"input_order"`
 	}
 	if err := s.comfyJSON(http.MethodGet, "/object_info/"+classType, nil, &objectInfo); err != nil {
 		return nil, err
@@ -235,12 +241,85 @@ func (s *Server) requiredInputs(classType string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("ComfyUI has no object info for %s", classType)
 	}
+	if len(entry.InputOrder.Required) > 0 {
+		return entry.InputOrder.Required, nil
+	}
 	keys := make([]string, 0, len(entry.Input.Required))
 	for key := range entry.Input.Required {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	return keys, nil
+}
+
+func (s *Server) normalizeModelInputs(graph map[string]comfyNode) error {
+	for id, node := range graph {
+		if node.ClassType != "CLIPLoader" {
+			continue
+		}
+		clipName, _ := node.Inputs["clip_name"].(string)
+		allowed, err := s.allowedValues("CLIPLoader", "clip_name")
+		if err != nil {
+			return err
+		}
+		if contains(allowed, clipName) {
+			continue
+		}
+		candidate := preferredMiniMaxTextEncoder(allowed)
+		if candidate == "" {
+			return fmt.Errorf("node %s requires a CLIP text encoder, but the template model %q is unavailable and no MiniMax H3 compatible replacement is installed", id, clipName)
+		}
+		node.Inputs["clip_name"] = candidate
+		graph[id] = node
+	}
+	return nil
+}
+
+func (s *Server) allowedValues(classType, inputName string) ([]string, error) {
+	var objectInfo map[string]struct {
+		Input struct {
+			Required map[string][]any `json:"required"`
+		} `json:"input"`
+	}
+	if err := s.comfyJSON(http.MethodGet, "/object_info/"+classType, nil, &objectInfo); err != nil {
+		return nil, err
+	}
+	input := objectInfo[classType].Input.Required[inputName]
+	if len(input) == 0 {
+		return nil, fmt.Errorf("ComfyUI has no required input %s.%s", classType, inputName)
+	}
+	values, ok := input[0].([]any)
+	if !ok {
+		return nil, fmt.Errorf("ComfyUI input %s.%s is not a selectable model list", classType, inputName)
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, asString(value))
+	}
+	return result, nil
+}
+
+func preferredMiniMaxTextEncoder(candidates []string) string {
+	for _, candidate := range candidates {
+		if strings.Contains(strings.ToLower(candidate), "minimax_h3") {
+			return candidate
+		}
+	}
+	for _, candidate := range candidates {
+		if strings.Contains(strings.ToLower(candidate), "h3") {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) copyAssets(assetIDs []string) ([]compiledAsset, error) {

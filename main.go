@@ -497,12 +497,33 @@ func (s *Server) agentHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 502, map[string]string{"error": "invalid chat completion response"})
 		return
 	}
-	var intent any
-	if json.Unmarshal([]byte(out.Choices[0].Message.Content), &intent) != nil {
+	intent, err := parseAgentJSON(out.Choices[0].Message.Content)
+	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": "Agent 返回的不是有效 JSON"})
 		return
 	}
 	writeJSON(w, 200, intent)
+}
+
+func parseAgentJSON(content string) (any, error) {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```") {
+		firstNewline := strings.IndexByte(content, '\n')
+		if firstNewline >= 0 {
+			content = content[firstNewline+1:]
+		}
+		content = strings.TrimSpace(strings.TrimSuffix(content, "```"))
+	}
+	start := strings.IndexByte(content, '{')
+	end := strings.LastIndexByte(content, '}')
+	if start < 0 || end < start {
+		return nil, fmt.Errorf("no JSON object in Agent response")
+	}
+	var intent map[string]any
+	if err := json.Unmarshal([]byte(content[start:end+1]), &intent); err != nil {
+		return nil, err
+	}
+	return intent, nil
 }
 func (s *Server) importWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

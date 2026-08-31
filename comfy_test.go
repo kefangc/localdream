@@ -18,6 +18,32 @@ func TestResolutionInputs(t *testing.T) {
 	}
 }
 
+func TestParseAgentJSON(t *testing.T) {
+	for _, response := range []string{
+		`{"mode":"text_to_video","prompt":{"subject":"kite"}}`,
+		"```json\n{\"mode\":\"text_to_video\",\"prompt\":{\"subject\":\"kite\"}}\n```",
+		"Here is the structured plan:\n{\"mode\":\"text_to_video\",\"prompt\":{\"subject\":\"kite\"}}",
+	} {
+		intent, err := parseAgentJSON(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if intent.(map[string]any)["mode"] != "text_to_video" {
+			t.Fatalf("unexpected Agent result: %#v", intent)
+		}
+	}
+	if _, err := parseAgentJSON("not JSON"); err == nil {
+		t.Fatal("expected invalid Agent text to fail")
+	}
+}
+
+func TestPreferredMiniMaxTextEncoder(t *testing.T) {
+	candidate := preferredMiniMaxTextEncoder([]string{"qwen3vl_32b_h3_generation_tail_50_63_int8_convrot.safetensors", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"})
+	if candidate != "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors" {
+		t.Fatalf("unexpected candidate: %s", candidate)
+	}
+}
+
 func TestCompileTextToVideoAgainstComfyUI(t *testing.T) {
 	if os.Getenv("COMFYUI_INTEGRATION") != "1" {
 		t.Skip("set COMFYUI_INTEGRATION=1 to validate the local ComfyUI workflow compiler")
@@ -99,6 +125,11 @@ func TestCompileAllModesAgainstComfyUI(t *testing.T) {
 			}
 			if len(compiled.Prompt) == 0 {
 				t.Fatal("compiled workflow is empty")
+			}
+			if node, exists := compiled.Prompt["369"]; exists {
+				if node.Inputs["processing_control_value"] != 0.08 || node.Inputs["processing_percent_1"] != 0.1 || node.Inputs["processing_percent_2"] != 0.9 || node.Inputs["mcs"] != float64(2) || node.Inputs["device"] != "auto" {
+					t.Fatalf("TESpeedMiniMaxH3 widget values are mapped incorrectly: %#v", node.Inputs)
+				}
 			}
 		})
 	}
