@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +43,22 @@ func TestPreferredMiniMaxTextEncoder(t *testing.T) {
 	candidate := preferredMiniMaxTextEncoder([]string{"qwen3vl_32b_h3_generation_tail_50_63_int8_convrot.safetensors", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"})
 	if candidate != "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors" {
 		t.Fatalf("unexpected candidate: %s", candidate)
+	}
+}
+
+func TestAttachAudioReference(t *testing.T) {
+	graph := map[string]comfyNode{"316": {ClassType: "MiniMaxH3ReferenceToVideo", Inputs: map[string]any{}}}
+	err := attachAssets(graph, workflowMode{PromptNode: 316}, "multi_reference_video", []compiledAsset{{ID: "asset_1", Filename: "asset_1.mp3", Kind: "audio"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, ok := graph["316"].Inputs["ref_audios.ref_audio_0"].([]any)
+	if !ok || len(link) != 2 {
+		t.Fatalf("audio reference was not linked: %#v", graph["316"].Inputs)
+	}
+	node, ok := graph[asString(link[0])]
+	if !ok || node.ClassType != "LoadAudio" || node.Inputs["audio"] != "asset_1.mp3" {
+		t.Fatalf("unexpected LoadAudio node: %#v", graph)
 	}
 }
 
@@ -88,6 +106,8 @@ func TestCompileAllModesAgainstComfyUI(t *testing.T) {
 		comfyInput: env("COMFYUI_INPUT", `D:\Comfy-Desktop\ComfyUI-Shared\input`),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+	imageID, secondImageID := testImageIDs(t, root)
+	audioID := testAssetID(t, root, ".mp3")
 	tests := []struct {
 		name    string
 		request generationRequest
@@ -101,19 +121,19 @@ func TestCompileAllModesAgainstComfyUI(t *testing.T) {
 		{
 			name: "image-to-video",
 			request: generationRequest{
-				Mode: "image_to_video", Prompt: "The subject looks toward the camera.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{"asset_1"},
+				Mode: "image_to_video", Prompt: "The subject looks toward the camera.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{imageID},
 			},
 		},
 		{
 			name: "first-last-frame",
 			request: generationRequest{
-				Mode: "first_last_frame", Prompt: "A smooth camera movement between the two frames.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{"asset_1", "asset_2"},
+				Mode: "first_last_frame", Prompt: "A smooth camera movement between the two frames.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{imageID, secondImageID},
 			},
 		},
 		{
 			name: "multi-reference",
 			request: generationRequest{
-				Mode: "multi_reference_video", Prompt: "Use the reference image as the visual subject.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{"asset_1"},
+				Mode: "multi_reference_video", Prompt: "Use the reference image and audio reference.", Duration: 5, AspectRatio: "16:9", Resolution: "480p", Steps: 4, AssetIDs: []string{imageID, audioID},
 			},
 		},
 	}
@@ -133,4 +153,60 @@ func TestCompileAllModesAgainstComfyUI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testAssetID(t *testing.T, root, extension string) string {
+	entries, err := os.ReadDir(filepath.Join(root, "data", "assets"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			counts[id]++
+		}
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), extension) {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if counts[id] == 1 {
+			return id
+		}
+	}
+	t.Skipf("no %s asset available for ComfyUI integration test", extension)
+	return ""
+}
+
+func testImageIDs(t *testing.T, root string) (string, string) {
+	entries, err := os.ReadDir(filepath.Join(root, "data", "assets"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{}
+	seen := map[string]bool{}
+	counts := map[string]int{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			counts[id]++
+		}
+	}
+	for _, entry := range entries {
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if entry.IsDir() || !imageExtensions[ext] {
+			continue
+		}
+		id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if counts[id] == 1 && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) < 2 {
+		t.Skip("need two uniquely named image assets for ComfyUI integration test")
+	}
+	return ids[0], ids[1]
 }

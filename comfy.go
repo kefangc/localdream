@@ -352,6 +352,8 @@ func (s *Server) copyAssets(assetIDs []string) ([]compiledAsset, error) {
 			kind = "image"
 		} else if videoExtensions[ext] {
 			kind = "video"
+		} else if audioExtensions[ext] {
+			kind = "audio"
 		} else {
 			return nil, fmt.Errorf("unsupported asset type: %s", filename)
 		}
@@ -364,14 +366,21 @@ func (s *Server) copyAssets(assetIDs []string) ([]compiledAsset, error) {
 }
 
 func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string, assets []compiledAsset) error {
-	images, videos := []string{}, []string{}
+	images, videos, audios := []string{}, []string{}, []string{}
 	for _, asset := range assets {
-		if asset.Kind == "image" {
+		switch asset.Kind {
+
+		case "image":
 			images = append(images, asset.Filename)
-		} else {
+		case "video":
 			videos = append(videos, asset.Filename)
+		case "audio":
+			audios = append(audios, asset.Filename)
+		default:
+			return fmt.Errorf("unsupported asset type: %s", asset.Kind)
 		}
 	}
+
 	switch modeName {
 	case "text_to_video":
 		if len(assets) > 0 {
@@ -379,16 +388,16 @@ func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string
 		}
 		return nil
 	case "image_to_video":
-		if len(videos) > 0 || len(images) != 1 {
+		if len(videos) > 0 || len(audios) > 0 || len(images) != 1 {
 			return fmt.Errorf("image-to-video requires exactly one image")
 		}
 	case "first_last_frame":
-		if len(videos) > 0 || len(images) != 2 {
+		if len(videos) > 0 || len(audios) > 0 || len(images) != 2 {
 			return fmt.Errorf("first-last-frame requires exactly two images")
 		}
 	case "multi_reference_video":
-		if len(assets) == 0 || len(images) > 9 || len(videos) > 3 {
-			return fmt.Errorf("multi-reference requires 1-9 images and up to 3 videos")
+		if len(assets) == 0 || len(images) > 9 || len(videos) > 3 || len(audios) > 1 {
+			return fmt.Errorf("multi-reference requires 1-9 images, up to 3 videos, and at most 1 audio reference")
 		}
 	default:
 		return fmt.Errorf("unknown mode: %s", modeName)
@@ -429,6 +438,11 @@ func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string
 		nextID++
 		graph[nodeID] = comfyNode{ClassType: "VHS_LoadVideo", Inputs: map[string]any{"video": filename, "force_rate": 0, "custom_width": 0, "custom_height": 0, "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1}, Meta: map[string]any{"title": "dynamic reference video"}}
 		target.Inputs[fmt.Sprintf("ref_videos.ref_video_%d", index)] = []any{nodeID, 0}
+	}
+	if len(audios) == 1 {
+		nodeID := strconv.Itoa(nextID)
+		graph[nodeID] = comfyNode{ClassType: "LoadAudio", Inputs: map[string]any{"audio": audios[0]}, Meta: map[string]any{"title": "dynamic reference audio"}}
+		target.Inputs["ref_audios.ref_audio_0"] = []any{nodeID, 0}
 	}
 	graph[targetID] = target
 	return nil
@@ -705,3 +719,10 @@ var timeNow = func() time.Time { return time.Now() }
 
 var imageExtensions = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".bmp": true, ".gif": true}
 var videoExtensions = map[string]bool{".mp4": true, ".mov": true, ".mkv": true, ".webm": true, ".avi": true, ".m4v": true}
+var audioExtensions = map[string]bool{
+	".mp3":  true,
+	".wav":  true,
+	".flac": true,
+	".ogg":  true,
+	".m4a":  true,
+}

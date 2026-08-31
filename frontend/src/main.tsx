@@ -435,7 +435,7 @@ function App() {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*,video/*"
+            accept="image/*,video/*,audio/*"
             multiple
             hidden
             onChange={(e) => upload(e.target.files)}

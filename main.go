@@ -165,9 +165,30 @@ func (s *Server) assetsHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
+	ext = strings.ToLower(ext)
+
 	t := "image"
-	if strings.HasPrefix(head.Header.Get("Content-Type"), "video/") || strings.HasSuffix(strings.ToLower(ext), ".mp4") || strings.HasSuffix(strings.ToLower(ext), ".mov") {
+	switch {
+	case strings.HasPrefix(head.Header.Get("Content-Type"), "audio/"),
+		strings.HasPrefix(head.Header.Get("Content-Type"), "video/"),
+		strings.HasPrefix(head.Header.Get("Content-Type"), "image/"):
+		if strings.HasPrefix(head.Header.Get("Content-Type"), "audio/") {
+			t = "audio"
+		} else if strings.HasPrefix(head.Header.Get("Content-Type"), "video/") {
+			t = "video"
+		}
+	case strings.HasSuffix(ext, ".mp3"),
+		strings.HasSuffix(ext, ".wav"),
+		strings.HasSuffix(ext, ".flac"),
+		strings.HasSuffix(ext, ".ogg"),
+		strings.HasSuffix(ext, ".m4a"):
+		t = "audio"
+	case strings.HasSuffix(ext, ".mp4"),
+		strings.HasSuffix(ext, ".webm"),
+		strings.HasSuffix(ext, ".mov"),
+		strings.HasSuffix(ext, ".mkv"):
 		t = "video"
+
 	}
 	a := Asset{ID: id, Name: head.Filename, Type: t, URL: "/media/" + name, Size: size, CreatedAt: time.Now()}
 	s.mu.Lock()
