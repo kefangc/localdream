@@ -70,10 +70,11 @@ JSON Schema 校验错误由 SDK 返回 `isError: true` 和可读说明，可能�
   "request_id": "video-rain-20261009-001",
   "mode": "text_to_video",
   "prompt": "integrated_multimodal_description: [Shot 1] A locked-off wide shot of rain falling on a quiet street at dusk.\n\noverall_soundscape: Steady rain and distant traffic.\n\nnon_diegetic_music: N/A",
-  "duration": 5,
+  "duration": 7,
   "aspect_ratio": "16:9",
-  "resolution": "720p",
+  "resolution": "0.75MP",
   "steps": 50,
+  "reference_video_fps": 7,
   "asset_ids": []
 }
 ```
@@ -88,9 +89,16 @@ JSON Schema 校验错误由 SDK 返回 `isError: true` 和可读说明，可能�
 
 一份草稿预留唯一 `generation_id`。提交超时先查询草稿/任务，再用相同草稿重试，不能通过新草稿“重试网络请求”。已失败/取消的任务再次提交原草稿仍返回原任务；确实要重新生成时创建新草稿。已删除的任务不会通过旧草稿重新生成。
 
+## 时长、参考帧率与 MP
+
+- `duration` 传用户原始需求，例如 7 秒传 `7`，不要让模型预先补成 `7.29`。普通模板本身将 `round(duration * 24)` 向上对齐到 `17n + 5` 帧：7 秒为 168 帧，对齐为 175 帧，输出约 `175 / 24 = 7.2917` 秒。这是普通工作流的帧数对齐，不是长视频续接补偿；长视频的上下文补帧与裁剪另有逻辑。这里不做精确时长裁剪，自定义工作流也可能有不同对齐规则。
+- `reference_video_fps` 已包含在 `prepare_generation` 的工具 Schema 中。省略或 `null` 默认 7；`0` 使用源帧率；其他允许 1–60（含小数，如 `12.5`）。控制参考视频解码/采样，不改变输出 24 FPS。纯文生模式不使用参考视频，该参数不会产生效果。草稿及任务结果均回显参考 FPS。
+- `resolution` 支持 `480p`（0.4 MP）、`720p`（0.9 MP），也支持 `0.1MP`–`1.9MP` 范围内的自定义十进制字符串，例如 `0.75MP`、`0.98MP`、`1.2MP`。MP 是百万像素，不是长边像素或固定宽高；实际宽高由画面比例及工作流对齐规则决定。
+- 自定义 MP 保留小数精度，不再强制保留一位小数；`0.750MP` 与 `0.75MP` 规范化为同一参数。`get_capabilities.resolutions` 列出预设，自定义范围见 `custom_resolution_mp_range` 和 `custom_resolution_format`。现有 HTTP 创建接口、内置 Agent 与 MCP 共用分辨率校验。
+
 ## 能力边界
 
-- 本版 MCP 暴露普通 H3 四种模式：文生、图生、首尾帧、多参考。长视频编排、自定义 MP、LoRA 选择和上传尚未开放。
+- 本版 MCP 暴露普通 H3 四种模式：文生、图生、首尾帧、多参考，支持自定义 MP。长视频编排、LoRA 选择和上传尚未开放。
 - 参数与素材绑定校验不等于完整 GPU 预检。`get_capabilities` 检查本地模板、prompt 节点与部分参考槽位；`prompt_node_available` 不表示全部模型和节点都可执行。
 - ComfyUI 不可达时明确返回 unknown 与 fallback 警告，不伪造可用状态。
 - GPU 图编译/模型校验仍在提交后的现有后台 worker 执行。错误通过任务状态返回。

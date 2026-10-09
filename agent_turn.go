@@ -67,8 +67,8 @@ func agentTools() []responses.Tool {
 		agentTool("load_skill", "Load a skill's complete SKILL.md instructions by name. Use h3-prompt-writing before preparing H3 video unless skills are disabled.", map[string]any{"name": stringProp}, []string{"name"}),
 		agentTool("read_skill_resource", "Read a reference document inside a loaded skill, such as references/base-en.txt or references/ref-en.txt.", map[string]any{"name": stringProp, "resource": stringProp}, []string{"name", "resource"}),
 		agentTool("prepare_generation", "Validate and save one H3 generation draft with the complete mode-specific prompt. This does not start video generation.", map[string]any{
-			"mode": stringProp, "prompt": stringProp, "duration": map[string]any{"type": "number"}, "aspect_ratio": stringProp,
-			"resolution": stringProp, "steps": map[string]any{"type": "integer"}, "asset_ids": map[string]any{"type": "array", "items": stringProp},
+			"mode": stringProp, "prompt": stringProp, "duration": map[string]any{"type": "number", "description": "User-requested seconds, 1–15. Pass the original duration unchanged; the ordinary template handles 17n+5 frame alignment at 24 FPS. Do not add long-video padding."}, "aspect_ratio": stringProp,
+			"resolution": map[string]any{"type": "string", "description": "480p, 720p, or a decimal MP string from 0.1MP to 1.9MP, e.g. 0.75MP or 1.2MP."}, "steps": map[string]any{"type": "integer"}, "asset_ids": map[string]any{"type": "array", "items": stringProp},
 			"reference_video_fps": map[string]any{"type": []string{"number", "null"}, "description": "Reference decoding FPS: null defaults to 7, 1–60 fps or 0 for source rate. H3 output stays 24 fps."},
 		}, []string{"mode", "prompt", "duration", "aspect_ratio", "resolution", "steps", "asset_ids", "reference_video_fps"}),
 		agentTool("submit_generation", "Submit the validated draft to local ComfyUI only when execution_policy is auto. Repeated calls return the same task.", map[string]any{}, []string{}),
@@ -181,8 +181,8 @@ func validateAgentDraft(draft generationRequest, selected []Asset) error {
 	if draft.AspectRatio != "16:9" && draft.AspectRatio != "9:16" && draft.AspectRatio != "1:1" && draft.AspectRatio != "4:3" {
 		return errors.New("不支持的画面比例")
 	}
-	if draft.Resolution != "480p" && draft.Resolution != "720p" {
-		return errors.New("当前 Agent 草稿只支持 480p 或 720p")
+	if err := normalizeGenerationResolution(&draft); err != nil {
+		return err
 	}
 	if draft.Steps < 1 || draft.Steps > 100 {
 		return errors.New("步数必须在 1 到 100 之间")
@@ -245,7 +245,7 @@ func (s *Server) runAgentTurn(ctx context.Context, input agentTurnInput, provide
 	loaded := map[string]bool{}
 	outputs := map[string]string{}
 	history := []any{map[string]any{"role": "user", "content": input.Prompt}}
-	instructions := "You are Local Dream's creative assistant. Use tools for facts and actions. Only selected assets exist. Never claim a video is finished until get_generation reports completed. For H3 video creation, call get_capabilities, load h3-prompt-writing when skills are enabled, read its relevant reference, then prepare_generation with the full structured H3 prompt. Do not silently change user-specified model, resolution, dialogue, asset roles or duration. Ask in plain text when a material choice is missing. submit_generation is only available when execution_policy is auto; do not call it for plan_only."
+	instructions := "You are Local Dream's creative assistant. Use tools for facts and actions. Only selected assets exist. Never claim a video is finished until get_generation reports completed. For H3 video creation, call get_capabilities, load h3-prompt-writing when skills are enabled, read its relevant reference, then prepare_generation with the full structured H3 prompt. Do not silently change user-specified model, resolution, dialogue, asset roles or duration. Pass the original duration unchanged: ordinary frame alignment is automatic and is separate from long-video continuation padding. Ask in plain text when a material choice is missing. submit_generation is only available when execution_policy is auto; do not call it for plan_only."
 	if input.SkillPolicy == "none" {
 		instructions += " Skills are disabled for this request."
 	} else {
@@ -300,7 +300,7 @@ func (s *Server) runAgentTool(input agentTurnInput, selected []Asset, result *ag
 	switch call.Name {
 	case "get_capabilities":
 		result.Steps = append(result.Steps, "读取 H3 生成能力")
-		return map[string]any{"ok": true, "modes": []string{"text_to_video", "image_to_video", "first_last_frame", "multi_reference_video"}, "duration_seconds": []int{1, 15}, "resolutions": []string{"480p", "720p"}, "aspect_ratios": []string{"16:9", "9:16", "1:1", "4:3"}, "multi_reference_max": map[string]int{"images": 9, "videos": 3, "audios": 1}, "note": "These are current app limits; actual ComfyUI execution is checked at submission."}
+		return map[string]any{"ok": true, "modes": []string{"text_to_video", "image_to_video", "first_last_frame", "multi_reference_video"}, "duration_seconds": []int{1, 15}, "resolutions": []string{"480p", "720p"}, "custom_resolution_mp_range": []float64{0.1, 1.9}, "custom_resolution_format": "<decimal>MP, e.g. 0.75MP or 1.2MP", "aspect_ratios": []string{"16:9", "9:16", "1:1", "4:3"}, "multi_reference_max": map[string]int{"images": 9, "videos": 3, "audios": 1}, "note": "These are current app limits; actual ComfyUI execution is checked at submission."}
 	case "list_assets":
 		assets := make([]map[string]string, 0, len(selected))
 		for _, a := range selected {
@@ -347,6 +347,9 @@ func (s *Server) runAgentTool(input agentTurnInput, selected []Asset, result *ag
 			Duration: proposed.Duration, AspectRatio: proposed.AspectRatio, Resolution: proposed.Resolution, Steps: proposed.Steps, AssetIDs: proposed.AssetIDs}
 		draft.ReferenceVideoFPS = proposed.ReferenceVideoFPS
 		if err := normalizeReferenceVideoFPS(&draft); err != nil {
+			return map[string]any{"ok": false, "error": err.Error()}
+		}
+		if err := normalizeGenerationResolution(&draft); err != nil {
 			return map[string]any{"ok": false, "error": err.Error()}
 		}
 		if input.ExecutionPolicy == "auto" {

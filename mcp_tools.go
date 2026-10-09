@@ -25,14 +25,21 @@ func addMCPTool[In, Out any](server *mcp.Server, name, description string, readO
 		panic(err)
 	} // all types are known at build time and exercised in tests
 	for field, values := range map[string][]any{
-		"mode":       {"text_to_video", "image_to_video", "first_last_frame", "multi_reference_video"},
-		"resolution": {"480p", "720p"}, "aspect_ratio": {"16:9", "9:16", "1:1", "4:3"},
-		"resource": {"SKILL.md", "references/base-en.txt", "references/ref-en.txt"},
-		"type":     {"", "image", "video", "audio"},
+		"mode":         {"text_to_video", "image_to_video", "first_last_frame", "multi_reference_video"},
+		"aspect_ratio": {"16:9", "9:16", "1:1", "4:3"},
+		"resource":     {"SKILL.md", "references/base-en.txt", "references/ref-en.txt"},
+		"type":         {"", "image", "video", "audio"},
 	} {
 		if p := schema.Properties[field]; p != nil {
 			p.Enum = values
 		}
+	}
+	if p := schema.Properties["resolution"]; p != nil {
+		p.Pattern = generationResolutionPattern
+	}
+	if p := schema.Properties["reference_video_fps"]; p != nil {
+		lo, hi := 1.0, 60.0
+		p.AnyOf = []*jsonschema.Schema{{Type: "null"}, {Enum: []any{0}}, {Type: "number", Minimum: &lo, Maximum: &hi}}
 	}
 	for field, bounds := range map[string][2]float64{"duration": {1, 15}, "steps": {1, 100}, "limit": {1, 100}, "offset": {0, 1000000}, "revision": {1, 1}} {
 		if p := schema.Properties[field]; p != nil {
@@ -112,9 +119,9 @@ type prepareToolInput struct {
 	RequestID         string   `json:"request_id" jsonschema:"Client-generated 8–128 character idempotency key. Reuse for retries; use a new key for changed parameters."`
 	Mode              string   `json:"mode" jsonschema:"H3 generation mode. Check get_capabilities first."`
 	Prompt            string   `json:"prompt" jsonschema:"Complete structured H3 prompt. Read read_prompt_guide for required sections."`
-	Duration          float64  `json:"duration" jsonschema:"Requested video duration in seconds, 1–15."`
+	Duration          float64  `json:"duration" jsonschema:"User-requested seconds, 1–15. Pass 7 for a 7-second request; do not pre-round or add continuation padding. The ordinary template aligns output frames to 17n+5 at 24 FPS (7 seconds produces 175 frames, about 7.2917 seconds)."`
 	AspectRatio       string   `json:"aspect_ratio"`
-	Resolution        string   `json:"resolution"`
+	Resolution        string   `json:"resolution" jsonschema:"480p (0.4 MP), 720p (0.9 MP), or a custom decimal MP string from 0.1MP to 1.9MP, e.g. 0.75MP or 1.2MP. Fractional MP precision is preserved; actual dimensions follow aspect ratio and pixel alignment."`
 	Steps             int      `json:"steps,omitempty" jsonschema:"Sampling steps, 1–100; omitted defaults to 50."`
 	AssetIDs          []string `json:"asset_ids" jsonschema:"Ordered asset IDs from this project. For first_last_frame: first image then last image. Text-to-video requires an empty array."`
 	ReferenceVideoFPS *float64 `json:"reference_video_fps,omitempty" jsonschema:"Reference decoding FPS: omit for 7; 0 uses source FPS; otherwise 1–60. Output remains 24 FPS."`
@@ -144,25 +151,27 @@ type draftToolOutput struct {
 	Validation string          `json:"validation"`
 }
 type generationToolOutput struct {
-	ID               string    `json:"generation_id"`
-	ProjectID        string    `json:"project_id"`
-	Status           string    `json:"status"`
-	Phase            string    `json:"phase"`
-	Mode             string    `json:"mode"`
-	Duration         float64   `json:"duration"`
-	Resolution       string    `json:"resolution"`
-	AspectRatio      string    `json:"aspect_ratio"`
-	Progress         int       `json:"progress"`
-	ProgressKnown    bool      `json:"progress_known"`
-	OutputURL        string    `json:"output_url,omitempty" jsonschema:"Path relative to the Local Dream server; present only after completion."`
-	Error            string    `json:"error,omitempty"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	PollAfterSeconds int       `json:"poll_after_seconds"`
+	ID                string    `json:"generation_id"`
+	ProjectID         string    `json:"project_id"`
+	Status            string    `json:"status"`
+	Phase             string    `json:"phase"`
+	Mode              string    `json:"mode"`
+	Duration          float64   `json:"duration"`
+	Resolution        string    `json:"resolution"`
+	AspectRatio       string    `json:"aspect_ratio"`
+	ReferenceVideoFPS *float64  `json:"reference_video_fps" jsonschema:"Reference decoding FPS; 0 means source FPS. Does not change the 24 FPS output."`
+	Progress          int       `json:"progress"`
+	ProgressKnown     bool      `json:"progress_known"`
+	OutputURL         string    `json:"output_url,omitempty" jsonschema:"Path relative to the Local Dream server; present only after completion."`
+	Error             string    `json:"error,omitempty"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	PollAfterSeconds  int       `json:"poll_after_seconds"`
 }
 
 func generationToolView(g Generation) generationToolOutput {
 	public := publicGeneration(g)
 	view := generationToolOutput{ID: g.ID, ProjectID: g.ProjectID, Status: g.Status, Phase: g.Phase, Mode: g.Mode, Duration: g.Duration, Resolution: g.Resolution, AspectRatio: g.AspectRatio, Progress: g.Progress, ProgressKnown: g.ProgressKnown, Error: g.Error, UpdatedAt: g.UpdatedAt}
+	view.ReferenceVideoFPS = public.ReferenceVideoFPS
 	if g.Status == "completed" {
 		view.OutputURL = public.OutputURL
 	}

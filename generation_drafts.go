@@ -49,6 +49,9 @@ func (s *Server) prepareGenerationDraft(ctx context.Context, requestID string, i
 	if err := normalizeReferenceVideoFPS(&in); err != nil {
 		return generationDraft{}, toolProblem("invalid_reference_video_fps", err.Error(), false)
 	}
+	if err := normalizeGenerationResolution(&in); err != nil {
+		return generationDraft{}, toolProblem("invalid_resolution", err.Error(), false)
+	}
 	if in.Steps == 0 {
 		in.Steps = 50
 	}

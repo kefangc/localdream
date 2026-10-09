@@ -25,6 +25,12 @@ $tools = Invoke-MCPRequest 2 'tools/list' @{}
 $capabilities = Invoke-MCPRequest 3 'tools/call' @{name = 'get_capabilities'; arguments = @{}}
 if ($tools.tools.Count -lt 9) { throw 'MCP tool catalogue is incomplete.' }
 if (-not $capabilities.structuredContent.ok) { throw 'Capabilities response is not successful.' }
+$prepare = $tools.tools | Where-Object { $_.name -eq 'prepare_generation' }
+$resolution = $prepare.inputSchema.properties.resolution
+if (-not $prepare.inputSchema.properties.reference_video_fps) { throw 'Reference video FPS is missing from the MCP schema.' }
+if (-not $resolution.pattern -or '0.75MP' -notmatch $resolution.pattern -or $resolution.enum) { throw 'Custom MP resolution is not exposed.' }
+$mpRange = $capabilities.structuredContent.data.custom_resolution_mp_range
+if ($mpRange.Count -ne 2 -or $mpRange[0] -ne 0.1 -or $mpRange[1] -ne 1.9) { throw 'Custom MP capability range is missing or inconsistent.' }
 [pscustomobject]@{
     Endpoint = $Endpoint
     Server = $init.serverInfo

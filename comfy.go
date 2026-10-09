@@ -719,6 +719,11 @@ func resolutionInputs(ratio, resolution string) (string, float64) {
 	megapixels := 0.9
 	if resolution == "480p" {
 		megapixels = 0.4
+	} else if strings.HasSuffix(resolution, "MP") {
+		in := generationRequest{Resolution: resolution}
+		if normalizeGenerationResolution(&in) == nil {
+			megapixels, _ = strconv.ParseFloat(strings.TrimSuffix(in.Resolution, "MP"), 64)
+		}
 	}
 	return fallback(ratios[ratio], "16:9 (Widescreen)"), megapixels
 }

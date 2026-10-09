@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -161,7 +162,7 @@ func TestMCPInvalidArgumentsAndAssetScope(t *testing.T) {
 	for _, tc := range []struct {
 		field string
 		value any
-	}{{"resolution", "4K"}, {"duration", 16}, {"steps", -1}, {"asset_ids", []string{"a", "a"}}, {"unexpected", true}, {"prompt", ""}} {
+	}{{"resolution", "4K"}, {"resolution", "0.09MP"}, {"resolution", "1.91MP"}, {"resolution", "NaNMP"}, {"reference_video_fps", -1}, {"reference_video_fps", 0.5}, {"reference_video_fps", 60.1}, {"duration", 16}, {"steps", -1}, {"asset_ids", []string{"a", "a"}}, {"unexpected", true}, {"prompt", ""}} {
 		args := validMCPPrepare()
 		args[tc.field] = tc.value
 		_, failed := callTestMCP[draftToolOutput](t, session, "prepare_generation", args)
@@ -250,10 +251,12 @@ func TestMCPUsesExistingComfySubmissionAndResult(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeFixture("manifest.json", workflowManifest{Modes: map[string]workflowMode{"text_to_video": {GroupID: 1, PromptNode: 1}}})
+	writeFixture("manifest.json", workflowManifest{Modes: map[string]workflowMode{"text_to_video": {GroupID: 1, PromptNode: 1, DurationNode: 3, ResolutionNode: 4}}})
 	writeFixture("workflow.json", canvasWorkflow{Groups: []canvasGroup{{ID: 1, Bounding: []float64{0, 0, 100, 100}}}, Nodes: []canvasNode{
 		{ID: 1, Type: "TestPrompt", Pos: []float64{10, 10}, NamedWidgets: map[string]any{"prompt": ""}},
 		{ID: 2, Type: "RandomNoise", Pos: []float64{20, 20}, NamedWidgets: map[string]any{"noise_seed": 1}},
+		{ID: 3, Type: "PrimitiveFloat", Pos: []float64{30, 30}, NamedWidgets: map[string]any{"value": 5}},
+		{ID: 4, Type: "ResolutionSelector", Pos: []float64{40, 40}, NamedWidgets: map[string]any{"megapixels": 0.9, "aspect_ratio": "16:9 (Widescreen)", "multiple": 32}},
 	}})
 	var posts atomic.Int32
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,6 +269,9 @@ func TestMCPUsesExistingComfySubmissionAndResult(t *testing.T) {
 			}
 			if body.ClientID == "" || body.Prompt["1"].Inputs["prompt"] == "" {
 				t.Error("existing compiler/submission contract lost")
+			}
+			if body.Prompt["3"].Inputs["value"] != float64(7) || body.Prompt["4"].Inputs["megapixels"] != 0.75 {
+				t.Error("compiler changed requested duration or custom MP precision")
 			}
 			writeJSON(w, 200, map[string]string{"prompt_id": "fake-prompt"})
 		case r.URL.Path == "/queue":
@@ -286,7 +292,12 @@ func TestMCPUsesExistingComfySubmissionAndResult(t *testing.T) {
 	if failed || capabilities.Data.Modes[0].RuntimeStatus != "prompt_node_available" {
 		t.Fatalf("probe: %+v", capabilities)
 	}
-	prepared, failed := callTestMCP[draftToolOutput](t, session, "prepare_generation", validMCPPrepare())
+	if capabilities.Data.CustomResolutionMPRange != [2]float64{0.1, 1.9} || capabilities.Data.DefaultReferenceVideoFPS != 7 || capabilities.Data.OutputFPS != 24 {
+		t.Fatalf("parameter capabilities: %+v", capabilities)
+	}
+	args := validMCPPrepare()
+	args["duration"], args["resolution"], args["reference_video_fps"] = 7, "0.75MP", 12.5
+	prepared, failed := callTestMCP[draftToolOutput](t, session, "prepare_generation", args)
 	if failed {
 		t.Fatalf("prepare: %+v", prepared)
 	}
@@ -310,8 +321,58 @@ func TestMCPUsesExistingComfySubmissionAndResult(t *testing.T) {
 	if failed || result.Data.Status != "completed" || !strings.HasPrefix(result.Data.OutputURL, "/api/generations/") {
 		t.Fatalf("result: %+v", result)
 	}
+	if result.Data.Duration != 7 || result.Data.Resolution != "0.75MP" || result.Data.ReferenceVideoFPS == nil || *result.Data.ReferenceVideoFPS != 12.5 {
+		t.Fatalf("task result lost requested parameters: %+v", result)
+	}
 	_, failed = callTestMCP[generationToolOutput](t, session, "submit_generation", in)
 	if failed || posts.Load() != 1 {
 		t.Fatalf("POST /prompt count = %d", posts.Load())
+	}
+}
+
+func TestMCPReferenceFPSAndCustomMPPersistence(t *testing.T) {
+	s := sequenceTestServer(t)
+	stopped, cancel := context.WithCancel(context.Background())
+	cancel() // Persistence only; no real ComfyUI or GPU requests.
+	s.ctx = stopped
+	session := connectTestMCP(t, s)
+	for i, fps := range []any{nil, float64(0), float64(1), 12.5, float64(60)} {
+		args := validMCPPrepare()
+		args["request_id"] = fmt.Sprintf("mcp-parameters-%d", i)
+		args["duration"], args["resolution"], args["reference_video_fps"] = 7, "0.750MP", fps
+		prepared, failed := callTestMCP[draftToolOutput](t, session, "prepare_generation", args)
+		if failed || prepared.Data == nil {
+			t.Fatalf("prepare fps %v: %+v", fps, prepared)
+		}
+		wantFPS := 7.0
+		if fps != nil {
+			wantFPS = fps.(float64)
+		}
+		draft := prepared.Data.Draft
+		if draft.Request.Duration != 7 || draft.Request.Continuity != nil || draft.Request.Strategy != "normal" || draft.Request.Resolution != "0.75MP" || *draft.Request.ReferenceVideoFPS != wantFPS {
+			t.Fatalf("draft changed parameters: %+v", draft.Request)
+		}
+		args["resolution"] = "0.75MP"
+		again, failed := callTestMCP[draftToolOutput](t, session, "prepare_generation", args)
+		if failed || again.Data.Draft.ID != draft.ID {
+			t.Fatal("equivalent MP spelling must be idempotent")
+		}
+		result, failed := callTestMCP[generationToolOutput](t, session, "submit_generation", submitToolInput{DraftID: draft.ID, Revision: 1})
+		if failed || result.Data.Resolution != "0.75MP" || result.Data.Duration != 7 || *result.Data.ReferenceVideoFPS != wantFPS {
+			t.Fatalf("task lost parameters: %+v", result)
+		}
+		s.workers.Wait()
+		var raw string
+		if err := s.db.QueryRow("SELECT payload FROM generations WHERE id=?", draft.GenerationID).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var stored Generation
+		if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+			t.Fatal(err)
+		}
+		recovered := requestFromJob(stored)
+		if recovered.Duration != 7 || recovered.Resolution != "0.75MP" || *recovered.ReferenceVideoFPS != wantFPS {
+			t.Fatalf("restart would change parameters: %+v", recovered)
+		}
 	}
 }

@@ -21,7 +21,10 @@ type mcpModeCapability struct {
 type mcpCapabilitiesOutput struct {
 	Modes                        []mcpModeCapability `json:"modes"`
 	DurationSeconds              [2]float64          `json:"duration_seconds"`
+	DurationBehavior             string              `json:"duration_behavior"`
 	Resolutions                  []string            `json:"resolutions"`
+	CustomResolutionMPRange      [2]float64          `json:"custom_resolution_mp_range"`
+	CustomResolutionFormat       string              `json:"custom_resolution_format"`
 	AspectRatios                 []string            `json:"aspect_ratios"`
 	Steps                        [2]int              `json:"steps"`
 	DefaultSteps                 int                 `json:"default_steps"`
@@ -39,9 +42,11 @@ func (s *Server) mcpCapabilities(ctx context.Context, _ emptyToolInput) (mcpCapa
 	out := mcpCapabilitiesOutput{
 		Modes: []mcpModeCapability{}, DurationSeconds: [2]float64{1, 15}, Resolutions: []string{"480p", "720p"}, AspectRatios: []string{"16:9", "9:16", "1:1", "4:3"},
 		Steps: [2]int{1, 100}, DefaultSteps: 50, DefaultReferenceVideoFPS: 7, ReferenceVideoFPSRange: [2]float64{1, 60}, OutputFPS: 24, CheckedAt: time.Now().UTC(),
+		DurationBehavior:        "Pass the user's requested duration unchanged. The bundled ordinary template rounds duration*24 to frames, then aligns upward to 17n+5. For 7 seconds this is 175/24 = 7.2917 seconds. This is frame alignment, not long-video continuation padding. Custom templates may differ.",
+		CustomResolutionMPRange: [2]float64{0.1, 1.9}, CustomResolutionFormat: "<decimal>MP, e.g. 0.75MP or 1.2MP; decimal precision is preserved. Resolutions lists only presets. Actual pixel dimensions are aligned by the workflow.",
 		Limitations: []string{
 			"Runtime probe checks only prompt nodes and reference slots. Full graph, model files and GPU execution are validated by the existing submission worker.",
-			"MCP v1 covers ordinary H3 generation; long-video orchestration, custom MP resolution, LoRA selection and media upload are not exposed.",
+			"MCP v1 covers ordinary H3 generation; long-video orchestration, LoRA selection and media upload are not exposed.",
 			"Reference video audio is not automatically reused. Add an explicit audio asset when needed.",
 			"Duration 1–15 seconds is the application validator range; the template's authoring recommendation is 5–15 seconds.",
 		},

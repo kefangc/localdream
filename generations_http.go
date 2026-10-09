@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -78,14 +76,8 @@ func (s *Server) createGeneration(in generationRequest) (Generation, int, error)
 	if in.Duration < 1 || in.Duration > 15 {
 		return Generation{}, 400, fmt.Errorf("时长必须在 1 到 15 秒之间")
 	}
-	if strings.HasSuffix(in.Resolution, "MP") {
-		mp, err := strconv.ParseFloat(strings.TrimSuffix(in.Resolution, "MP"), 64)
-		if err != nil || math.IsNaN(mp) || math.IsInf(mp, 0) || mp < 0.1 || mp > 1.9 {
-			return Generation{}, 400, fmt.Errorf("自定义分辨率必须在 0.1 到 1.9 MP 之间")
-		}
-		in.Resolution = fmt.Sprintf("%.1fMP", mp)
-	} else if in.Resolution != "480p" && in.Resolution != "720p" {
-		return Generation{}, 400, fmt.Errorf("请选择 480p、720p 或自定义 MP 分辨率")
+	if err := normalizeGenerationResolution(&in); err != nil {
+		return Generation{}, 400, err
 	}
 	if in.Steps == 0 {
 		in.Steps = 50
