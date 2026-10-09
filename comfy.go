@@ -19,15 +19,16 @@ type workflowManifest struct {
 }
 
 type workflowMode struct {
-	GroupID        int                             `json:"group_id"`
-	GroupIndex     int                             `json:"group_index"`
-	PromptNode     int                             `json:"prompt_node"`
-	DurationNode   int                             `json:"duration_node"`
-	ResolutionNode int                             `json:"resolution_node"`
-	UNetNode       int                             `json:"unet_node"`
-	UNetModel      string                          `json:"unet_model"`
-	AssetNodes     []int                           `json:"asset_nodes"`
-	Accelerations  map[string]workflowAcceleration `json:"accelerations"`
+	GroupID         int                             `json:"group_id"`
+	GroupIndex      int                             `json:"group_index"`
+	PromptNode      int                             `json:"prompt_node"`
+	DurationNode    int                             `json:"duration_node"`
+	ResolutionNode  int                             `json:"resolution_node"`
+	UNetNode        int                             `json:"unet_node"`
+	UNetModel       string                          `json:"unet_model"`
+	AssetNodes      []int                           `json:"asset_nodes"`
+	GuideImageNodes []int                           `json:"guide_image_nodes,omitempty"`
+	Accelerations   map[string]workflowAcceleration `json:"accelerations"`
 }
 
 type workflowAcceleration struct {
@@ -44,12 +45,13 @@ type canvasWorkflow struct {
 }
 
 type canvasNode struct {
-	ID           int           `json:"id"`
-	Type         string        `json:"type"`
-	Title        string        `json:"title"`
-	Pos          []float64     `json:"pos"`
-	Inputs       []canvasInput `json:"inputs"`
-	WidgetValues []any         `json:"widgets_values"`
+	NamedWidgets map[string]any `json:"widgets_values_named"`
+	ID           int            `json:"id"`
+	Type         string         `json:"type"`
+	Title        string         `json:"title"`
+	Pos          []float64      `json:"pos"`
+	Inputs       []canvasInput  `json:"inputs"`
+	WidgetValues []any          `json:"widgets_values"`
 }
 
 type canvasInput struct {
@@ -81,8 +83,16 @@ type compiledAsset struct {
 }
 
 func (s *Server) compilePrompt(payload generationRequest) (comfyPrompt, error) {
-	workflowPath := filepath.Join(s.root, "templates", "h3", "workflow.json")
-	manifestPath := filepath.Join(s.root, "templates", "h3", "manifest.json")
+	if err := normalizeReferenceVideoFPS(&payload); err != nil {
+		return comfyPrompt{}, err
+	}
+	templateRoot := env("H3_TEMPLATE_DIR", filepath.Join(s.root, "templates", "h3"))
+	workflowPath := filepath.Join(templateRoot, "workflow.json")
+	if payload.Continuity != nil {
+		workflowPath = filepath.Join(templateRoot, "workflow-longvideo-motion-context.json")
+		payload.Mode = "multi_reference_video"
+	}
+	manifestPath := filepath.Join(templateRoot, "manifest.json")
 
 	var doc canvasWorkflow
 	if err := readJSON(workflowPath, &doc); err != nil {
@@ -116,7 +126,7 @@ func (s *Server) compilePrompt(payload generationRequest) (comfyPrompt, error) {
 	}
 	selected := map[string]bool{}
 	for id, node := range nodes {
-		if !ignoredCanvasNode(node.Type) && nodeInsideGroup(node, *group) {
+		if !ignoredCanvasNode(node.Type) && (nodeInsideGroup(node, *group) || payload.Continuity != nil && strings.HasPrefix(node.Type, "MiniMaxH3MotionContext")) {
 			selected[id] = true
 		}
 	}
@@ -188,8 +198,26 @@ func (s *Server) compilePrompt(payload generationRequest) (comfyPrompt, error) {
 	if err != nil {
 		return comfyPrompt{}, err
 	}
-	if err := attachAssets(graph, mode, payload.Mode, assets); err != nil {
+	assetMode := payload.Mode
+	if payload.Continuity != nil {
+		assetMode = "long_video"
+	}
+	referenceLoadFPS := *payload.ReferenceVideoFPS
+	if payload.ReferenceVideoPreserveDuration {
+		assets, err = s.prepareReferenceVideoTiming(assets, referenceLoadFPS)
+		if err != nil {
+			return comfyPrompt{}, err
+		}
+		referenceLoadFPS = 24
+	}
+	if err := attachAssets(graph, mode, assetMode, assets, referenceLoadFPS); err != nil {
 		return comfyPrompt{}, err
+	}
+	if payload.Continuity != nil {
+		if err := applyClipContext(graph, payload.Continuity); err != nil {
+			return comfyPrompt{}, err
+		}
+		pruneLongGraph(graph)
 	}
 	return comfyPrompt{Prompt: graph, ClientID: "localdream-" + newID()}, nil
 }
@@ -200,6 +228,14 @@ func (s *Server) compileNodeInputs(node canvasNode, links map[string][]any) (map
 		if link, ok := links[asString(input.Link)]; ok && len(link) > 2 {
 			inputs[input.Name] = []any{asString(link[1]), int(asFloat(link[2]))}
 		}
+	}
+	if len(node.NamedWidgets) > 0 {
+		for name, value := range node.NamedWidgets {
+			if _, linked := inputs[name]; !linked {
+				inputs[name] = value
+			}
+		}
+		return inputs, nil
 	}
 	widgets := append([]any(nil), node.WidgetValues...)
 	for _, input := range node.Inputs {
@@ -329,43 +365,36 @@ func (s *Server) copyAssets(assetIDs []string) ([]compiledAsset, error) {
 	if err := os.MkdirAll(s.comfyInput, 0755); err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(filepath.Join(s.root, "data", "assets"))
-	if err != nil {
-		return nil, fmt.Errorf("read local assets: %w", err)
-	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	assets := make([]compiledAsset, 0, len(assetIDs))
 	for _, assetID := range assetIDs {
-		prefix := assetID + "."
-		filename := ""
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
-				filename = entry.Name()
+		var record Asset
+		for _, a := range s.assets {
+			if a.ID == assetID {
+				record = a
 				break
 			}
 		}
-		if filename == "" {
+		if record.ID == "" {
 			return nil, fmt.Errorf("asset not found: %s", assetID)
 		}
-		ext := strings.ToLower(filepath.Ext(filename))
-		kind := ""
-		if imageExtensions[ext] {
-			kind = "image"
-		} else if videoExtensions[ext] {
-			kind = "video"
-		} else if audioExtensions[ext] {
-			kind = "audio"
-		} else {
-			return nil, fmt.Errorf("unsupported asset type: %s", filename)
-		}
-		if err := copyFile(filepath.Join(s.root, "data", "assets", filename), filepath.Join(s.comfyInput, filename)); err != nil {
+		path, err := s.assetPath(record)
+		if err != nil {
 			return nil, err
 		}
-		assets = append(assets, compiledAsset{ID: assetID, Filename: filename, Kind: kind})
+		// Namespace ComfyUI input copies too: legacy asset_1.* must not collide
+		// with other producers writing to the shared ComfyUI input directory.
+		filename := "localdream_" + record.Filename
+		if err := copyFile(path, filepath.Join(s.comfyInput, filename)); err != nil {
+			return nil, err
+		}
+		assets = append(assets, compiledAsset{ID: assetID, Filename: filename, Kind: record.Type})
 	}
 	return assets, nil
 }
 
-func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string, assets []compiledAsset) error {
+func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string, assets []compiledAsset, referenceVideoFPS float64) error {
 	images, videos, audios := []string{}, []string{}, []string{}
 	for _, asset := range assets {
 		switch asset.Kind {
@@ -399,10 +428,14 @@ func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string
 		if len(assets) == 0 || len(images) > 9 || len(videos) > 3 || len(audios) > 1 {
 			return fmt.Errorf("multi-reference requires 1-9 images, up to 3 videos, and at most 1 audio reference")
 		}
+	case "long_video":
+		if len(images) > 9 || len(videos) > 3 || len(audios) > 1 {
+			return fmt.Errorf("长视频每段最多 9 张图片、3 段视频和 1 段音频")
+		}
 	default:
 		return fmt.Errorf("unknown mode: %s", modeName)
 	}
-	if modeName != "multi_reference_video" {
+	if modeName != "multi_reference_video" && modeName != "long_video" {
 		for index, nodeID := range mode.AssetNodes {
 			if index >= len(images) {
 				break
@@ -415,6 +448,21 @@ func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string
 			graph[strconv.Itoa(nodeID)] = node
 		}
 		return nil
+	}
+	// Optional isolated template: Picture 1 is identity; Pictures 2/3 are exact first/last guides.
+	// Keep all images as general references too, so prompt Picture labels remain stable.
+	if len(mode.GuideImageNodes) > 0 {
+		if len(mode.GuideImageNodes) != 2 || len(images) < 3 {
+			return fmt.Errorf("anchored reference template requires identity, first-frame, and last-frame images")
+		}
+		for index, nodeID := range mode.GuideImageNodes {
+			node, ok := graph[strconv.Itoa(nodeID)]
+			if !ok || node.ClassType != "LoadImage" {
+				return fmt.Errorf("guide image input node is missing: %d", nodeID)
+			}
+			node.Inputs["image"] = images[index+1]
+			graph[strconv.Itoa(nodeID)] = node
+		}
 	}
 	targetID := strconv.Itoa(mode.PromptNode)
 	target, ok := graph[targetID]
@@ -436,7 +484,7 @@ func attachAssets(graph map[string]comfyNode, mode workflowMode, modeName string
 	for index, filename := range videos {
 		nodeID := strconv.Itoa(nextID)
 		nextID++
-		graph[nodeID] = comfyNode{ClassType: "VHS_LoadVideo", Inputs: map[string]any{"video": filename, "force_rate": 0, "custom_width": 0, "custom_height": 0, "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1}, Meta: map[string]any{"title": "dynamic reference video"}}
+		graph[nodeID] = comfyNode{ClassType: "VHS_LoadVideo", Inputs: map[string]any{"video": filename, "force_rate": referenceVideoFPS, "custom_width": 0, "custom_height": 0, "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1}, Meta: map[string]any{"title": "dynamic reference video"}}
 		target.Inputs[fmt.Sprintf("ref_videos.ref_video_%d", index)] = []any{nodeID, 0}
 	}
 	if len(audios) == 1 {
@@ -456,7 +504,7 @@ func applyAcceleration(graph map[string]comfyNode, mode workflowMode, payload ge
 	}
 	steps := payload.Steps
 	if steps < 1 {
-		steps = 4
+		steps = 50
 	}
 	if steps > 100 {
 		steps = 100
@@ -527,12 +575,49 @@ func (s *Server) comfyJSON(method, path string, body any, output any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= http.StatusMultipleChoices {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("ComfyUI returned %s: %s", resp.Status, strings.TrimSpace(string(raw)))
+		return &comfyHTTPError{Status: resp.StatusCode, Detail: strings.TrimSpace(string(raw))}
 	}
 	if output == nil {
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(output)
+}
+
+// cancelComfyJob changes ComfyUI state before the local record is cancelled.
+// /interrupt is global in ComfyUI, so only call it after remoteJob matched the
+// exact prompt/client owned by this Local Dream task.
+func (s *Server) cancelComfyJob(g Generation) error {
+	if g.PromptID == "" && g.ClientID == "" {
+		return nil // not submitted yet; runJob will observe the local cancellation
+	}
+	promptID, status, err := s.remoteJob(g)
+	if err != nil {
+		return fmt.Errorf("无法确认 ComfyUI 中的任务：%w", err)
+	}
+	switch status {
+	case "running":
+		return s.comfyJSON(http.MethodPost, "/interrupt", map[string]string{"prompt_id": promptID}, nil)
+	case "queued":
+		if promptID == "" {
+			return fmt.Errorf("ComfyUI 队列中没有可删除的 prompt_id")
+		}
+		return s.comfyJSON(http.MethodPost, "/queue", map[string]any{"delete": []string{promptID}}, nil)
+	case "history", "missing":
+		// It has already left the cancellable queue. Local watch/reconciliation
+		// owns the final history result; do not send a broad interrupt.
+		return nil
+	default:
+		return fmt.Errorf("ComfyUI 返回未知任务状态 %q", status)
+	}
+}
+
+type comfyHTTPError struct {
+	Status int
+	Detail string
+}
+
+func (e *comfyHTTPError) Error() string {
+	return fmt.Sprintf("ComfyUI returned %d: %s", e.Status, e.Detail)
 }
 
 func (s *Server) comfyResult(promptID string) (message string, done bool, failed bool, outputURL string, err error) {
@@ -557,6 +642,10 @@ func (s *Server) comfyResult(promptID string) (message string, done bool, failed
 	if item.Status.Status == "error" {
 		return fmt.Sprint(item.Status.Messages), false, true, "", nil
 	}
+	// Wait for the whole graph, including Save Latent, not just a video output.
+	if item.Status.Status != "success" {
+		return "", false, false, "", nil
+	}
 	for _, nodeOutput := range item.Outputs {
 		outputs := append(append(nodeOutput.Gifs, nodeOutput.Videos...), nodeOutput.Images...)
 		for _, output := range outputs {
@@ -566,7 +655,7 @@ func (s *Server) comfyResult(promptID string) (message string, done bool, failed
 		}
 	}
 	if item.Outputs != nil {
-		return "", true, false, "", nil
+		return "工作流执行结束但未返回视频", false, true, "", nil
 	}
 	return "", false, false, "", nil
 }

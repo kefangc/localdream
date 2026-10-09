@@ -15,7 +15,8 @@
       "group_id": 5, "group_index": 0, "prompt_node": 133, "output_node": 189, "duration_node": 135, "resolution_node": 115,
       "unet_node": 129, "unet_model": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "asset_nodes": [114],
       "accelerations": {
-        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4}
+        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4},
+        "ref2v_8": {"label": "Ref2V 8 步 LoRA", "lora_name": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", "steps": 8, "te_speed_mode": "8-step LoRA"}
       }
     },
     "first_last_frame": {
@@ -30,7 +31,8 @@
       "group_id": 9, "group_index": 4, "prompt_node": 316, "output_node": 285, "duration_node": 292, "resolution_node": 290,
       "unet_node": 305, "unet_model": "minimax_h3_ref2va_pruned_int8_convrot.safetensors", "asset_nodes": [308, 295],
       "accelerations": {
-        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4, "te_speed_mode": "4-step LoRA"}
+        "ref2v_4": {"label": "Ref2V 4 步 LoRA", "lora_name": "minimax_h3_ref2v_lightx2v_turbo_4step_v0.1_resized_avg_rank_20_bf16.safetensors", "steps": 4, "te_speed_mode": "4-step LoRA"},
+        "ref2v_8": {"label": "Ref2V 8 步 LoRA", "lora_name": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", "steps": 8, "te_speed_mode": "8-step LoRA"}
       }
     }
   },

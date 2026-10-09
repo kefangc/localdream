@@ -17,7 +17,16 @@ data/assets/
 data/provider.json
 data/*.db
 data/*.sqlite
+data/*.sqlite-*
+data/comfy-backend.log
+
+# Locally generated distribution archives.
+release/
 
 # Stale interpreter cache from the removed legacy adapter.
 __pycache__/
 *.py[cod]
+
+# Local browser QA artifacts.
+.playwright-cli/
+output/playwright/

@@ -1,0 +1,511 @@
+/* Project navigation and compact media cards share the existing studio tokens. */
+.sidebar-note {
+  display: none;
+}
+.sidebar-bottom {
+  margin-top: auto;
+  padding-top: 18px;
+}
+.sidebar-projects {
+  margin-top: 28px;
+  min-height: 0;
+}
+.projects-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.projects-heading > button:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: #6b7972;
+  padding: 7px 0;
+}
+.projects-heading > button:first-child > svg:last-child {
+  width: 12px;
+  color: #99a59f;
+}
+.projects-heading .icon-button {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+}
+.sidebar-project-list {
+  max-height: calc(100dvh - 405px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 2px 0;
+}
+.sidebar-project {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 3px 5px 3px 10px;
+  margin-bottom: 3px;
+  gap: 4px;
+  min-width: 0;
+}
+.sidebar-project:hover,
+.sidebar-project:focus-within,
+.sidebar-project:has(.menu-trigger.open) {
+  background: #ecefeb;
+}
+.sidebar-project.selected {
+  background: var(--mint);
+  color: var(--accent);
+}
+.project-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  text-align: left;
+  font-size: 13px;
+}
+.project-link svg {
+  flex: 0 0 auto;
+  color: #718178;
+}
+.project-link span {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.project-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+  opacity: 0;
+}
+.project-row-actions .icon-button {
+  width: 25px;
+  height: 28px;
+  border-radius: 5px;
+  padding: 3px;
+  color: #77847c;
+}
+.sidebar-project:hover .project-row-actions,
+.sidebar-project:focus-within .project-row-actions,
+.sidebar-project:has(.menu-trigger.open) .project-row-actions {
+  opacity: 1;
+}
+.project-row-actions .icon-button:hover {
+  background: #dce5de;
+  color: var(--accent);
+}
+.project-empty {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #87958d;
+  font-size: 11px;
+  padding: 12px 10px;
+}
+.archived-project-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: var(--muted);
+  padding: 14px 10px 7px;
+}
+.archived-project-toggle span {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #edf0ed;
+}
+.mobile-project-heading {
+  display: none;
+}
+.workspace-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.breadcrumb {
+  min-width: 0;
+}
+.creation-modes {
+  max-width: 940px;
+  margin: 0 auto 24px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.creation-modes button {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 10px 17px;
+}
+.action-menu.floating-panel {
+  width: 212px;
+  padding: 6px;
+  border-radius: 10px;
+  box-shadow: 0 10px 36px #152b2020;
+}
+.action-menu [role='menu'] > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.action-menu [role='menu'] > button:not(:disabled):hover {
+  background: #f0f5f1;
+}
+.action-menu [role='menu'] > button.danger {
+  color: #b05f50;
+}
+.action-menu [role='menu'] > button.danger:not(:disabled):hover {
+  background: #fff0ec;
+}
+.action-menu-extra {
+  padding: 12px 9px 7px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.record-move {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.record-move > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.record-move select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fafcfa;
+}
+.project-dialog textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 85px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+.project-dialog label small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.job-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+.record-card {
+  border-radius: 15px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 4px #26453503;
+  transition:
+    box-shadow 160ms,
+    border-color 160ms;
+}
+.record-card:hover {
+  box-shadow: 0 6px 22px #2645350b;
+  border-color: #c8d8cd;
+}
+.record-card .job-preview {
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: #17251f;
+  flex: 0 0 auto;
+}
+.record-card .job-preview video {
+  aspect-ratio: 16 / 9;
+}
+.record-card .job-placeholder {
+  background: #edf2ee;
+  color: #82998c;
+}
+.record-card .job-status {
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 20px;
+  padding: 4px 9px;
+  font-size: 10px;
+  box-shadow: 0 1px 4px #17251f0b;
+  pointer-events: none;
+}
+.record-card .job-status::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.record-card .job-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 18px 18px 12px;
+}
+.record-card .job-title {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+}
+.record-card .job-title strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #293e33;
+}
+.record-card .job-title time {
+  margin-left: auto;
+  color: #94a098;
+  font-size: 10px;
+  line-height: 23px;
+  white-space: nowrap;
+}
+.record-card .job-prompt {
+  color: #77867d;
+  font-size: 12px;
+  line-height: 1.85;
+  height: 44px;
+  margin: 12px 0;
+}
+.record-specs {
+  font-size: 11px;
+  color: #7d9084;
+  margin: 0 0 10px;
+  line-height: 1.8;
+}
+.record-context {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+  min-height: 20px;
+}
+.record-context span {
+  font-size: 10px;
+  color: #78897e;
+  background: #f1f5f1;
+  border-radius: 4px;
+  padding: 2px 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.record-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #edf1ed;
+  padding-top: 11px;
+  margin-top: auto;
+}
+.record-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  border-radius: 7px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  background: #edf5ef;
+}
+.record-primary:hover:not(:disabled) {
+  background: #e0ede3;
+}
+.record-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.record-secondary .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 32px;
+  color: #7b8b81;
+  border-radius: 6px;
+  padding: 0;
+  text-decoration: none;
+}
+.record-secondary .icon-button:hover,
+.record-secondary .icon-button.open {
+  background: #eef3ef;
+  color: var(--accent);
+}
+.record-details {
+  width: min(700px, calc(100vw - 32px));
+}
+.record-identifier {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  border-block: 1px solid var(--border);
+  padding: 12px 0;
+  margin: 20px 0;
+}
+.record-identifier code {
+  overflow-wrap: anywhere;
+}
+.record-prompt-full {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 12px;
+  color: #607468;
+  background: #f6f8f5;
+  border-radius: 9px;
+  padding: 16px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.asset-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.asset-actions select {
+  max-width: 100%;
+  font-size: 12px;
+}
+.asset-project-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.asset-project-filter select {
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #46584d;
+  font-size: 12px;
+}
+@media (hover: none) {
+  .project-row-actions {
+    opacity: 1;
+  }
+}
+@media (max-width: 1050px) and (min-width: 761px) {
+  .sidebar {
+    width: 218px;
+  }
+  .workspace {
+    margin-left: 218px;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar-projects {
+    margin-top: 16px;
+  }
+  .projects-heading {
+    padding: 0;
+    justify-content: center;
+  }
+  .projects-heading > button:first-child {
+    padding: 12px;
+  }
+  .projects-heading > button:first-child span,
+  .projects-heading > button:first-child > svg:last-child,
+  .projects-heading > .icon-button {
+    display: none;
+  }
+  .sidebar-project-list {
+    position: fixed;
+    left: 74px;
+    top: 150px;
+    width: min(265px, calc(100vw - 85px));
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 10px 45px #1b352333;
+    border: 1px solid var(--border);
+    background: white;
+    max-height: calc(100dvh - 200px);
+  }
+  .project-row-actions {
+    opacity: 1;
+  }
+  .mobile-project-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 5px 10px;
+    font-size: 12px;
+  }
+  .creation-modes {
+    justify-content: flex-start;
+    gap: 4px;
+  }
+  .creation-modes button {
+    padding: 8px 11px;
+    font-size: 11px;
+  }
+  .creation-modes button svg {
+    width: 14px;
+  }
+  .job-grid {
+    gap: 16px;
+  }
+  .asset-project-filter {
+    width: 100%;
+  }
+  .asset-project-filter select {
+    flex: 1;
+  }
+  .record-card .job-info {
+    padding: 15px 15px 11px;
+  }
+}
+@media (max-width: 500px) {
+  .sidebar-project-list {
+    left: 60px;
+  }
+  .breadcrumb > span,
+  .breadcrumb > strong {
+    display: inline;
+  }
+  .breadcrumb > .workspace-name {
+    max-width: 105px;
+  }
+  .topbar .connection {
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+  .record-primary {
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .record-card {
+    transition: none;
+  }
+}

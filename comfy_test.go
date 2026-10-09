@@ -48,7 +48,7 @@ func TestPreferredMiniMaxTextEncoder(t *testing.T) {
 
 func TestAttachAudioReference(t *testing.T) {
 	graph := map[string]comfyNode{"316": {ClassType: "MiniMaxH3ReferenceToVideo", Inputs: map[string]any{}}}
-	err := attachAssets(graph, workflowMode{PromptNode: 316}, "multi_reference_video", []compiledAsset{{ID: "asset_1", Filename: "asset_1.mp3", Kind: "audio"}})
+	err := attachAssets(graph, workflowMode{PromptNode: 316}, "multi_reference_video", []compiledAsset{{ID: "asset_1", Filename: "asset_1.mp3", Kind: "audio"}}, defaultReferenceVideoFPS)
 	if err != nil {
 		t.Fatal(err)
 	}

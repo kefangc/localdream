@@ -38,6 +38,8 @@ go run .
 
 当前 H3 模板副本位于 `templates/h3/`。Go 会把画布工作流编译为 ComfyUI `/prompt` 所需的 API 节点图，再轮询 `/history/{prompt_id}` 获取完成状态与输出视频 URL。
 
+参考视频可通过 `reference_video_fps` 控制载入帧率，新请求默认 7fps，允许 1–60fps（支持小数），0 使用源帧率；输出仍为 24fps。历史兼容、短参考限制和验证方式见 [参考视频 FPS](docs/reference-video-fps.md)。
+
 ## 验证
 
 ```powershell
@@ -56,3 +58,7 @@ npm run build
 $env:COMFYUI_INTEGRATION='1'
 go test -run TestCompileTextToVideoAgainstComfyUI -v
 ```
+
+## v1 长视频更新
+
+手动分段、有效时长补偿、连续续接、配置与后端职责拆分见 [长视频使用与实现说明](docs/long-video-v1.md)。v2 未改动。真实 GPU 生成验证状态请以该说明为准。
