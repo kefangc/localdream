@@ -37,24 +37,11 @@ func (s *Server) generationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isCancel {
-		g, ok := s.job(id)
-		if !ok {
-			writeJSON(w, 404, map[string]string{"error": "not found"})
+		g, status, err := s.cancelGeneration(id)
+		if err != nil {
+			writeJSON(w, status, map[string]string{"error": err.Error()})
 			return
 		}
-		if !activeGeneration(g) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "只能取消排队中或生成中的任务"})
-			return
-		}
-		if err := s.cancelComfyJob(g); err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		if err := s.updateJob(id, "cancelled", 0, ""); err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
-			return
-		}
-		g, _ = s.job(id)
 		writeJSON(w, 200, map[string]string{"status": g.Status})
 		return
 	}

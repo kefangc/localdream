@@ -129,7 +129,7 @@ func (s *Server) createGeneration(in generationRequest) (Generation, int, error)
 			if a.ID != assetID {
 				continue
 			}
-			if in.ProjectID != "" && a.ProjectID != in.ProjectID {
+			if (in.ProjectID != "" || in.AgentJobID != "") && a.ProjectID != in.ProjectID {
 				s.mu.Unlock()
 				return Generation{}, 400, fmt.Errorf("只能引用当前项目的素材")
 			}

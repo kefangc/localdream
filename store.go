@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS generations (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS long_videos (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS generation_drafts (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS legacy_imports (source TEXT PRIMARY KEY, payload TEXT NOT NULL);
 INSERT OR IGNORE INTO metadata VALUES ('schema_version','1');`)
 	if err != nil {

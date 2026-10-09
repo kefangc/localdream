@@ -62,6 +62,7 @@ func run() error {
 	}
 	defer cleanup()
 	mux := http.NewServeMux()
+	mux.Handle("/mcp", s.mcpHandler())
 	mux.HandleFunc("/api/assets", s.assetsHandler)
 	mux.HandleFunc("/api/assets/", s.deleteAssetHandler)
 	mux.HandleFunc("/api/projects", s.projectsHandler)
