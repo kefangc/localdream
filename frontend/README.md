@@ -38,7 +38,7 @@ Styles use shared variables in `src/styles.css`, with layout, creator and librar
 - Agent is optional and disabled initially. It uses the saved provider, sends description/asset information to that provider, and never auto-submits the resulting prompt.
 - No hardcoded asset-count ceiling is displayed. The existing backend owns runtime/workflow limits; basic frontend validation only checks required reference presence.
 - The connection badge checks Local Dream API availability, not ComfyUI model readiness.
-- Assets and generation records currently belong to the running Go service session. This UI does not add backend persistence.
+- The Go backend persists assets, generation records, projects and MCP drafts in SQLite. The frontend reads them through the product API.
 - Page navigation preserves the in-memory prompt. Reloading the browser does not preserve unsent drafts.
 
 ## Verification

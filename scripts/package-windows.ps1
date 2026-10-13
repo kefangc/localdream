@@ -77,7 +77,7 @@ Copy-Item -LiteralPath $frontendDist -Destination (Join-Path $stage 'frontend') 
 Copy-Item -LiteralPath $templatesRoot -Destination $stage -Recurse
 Copy-Item -LiteralPath (Join-Path $packagingRoot 'start-localdream.cmd') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $packagingRoot 'config.example.cmd') -Destination $stage
-Copy-Item -LiteralPath (Join-Path $packagingRoot '发布说明.md') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $packagingRoot 'README.md') -Destination $stage
 
 # Intentionally do not copy data/. It can contain SQLite databases, WAL/SHM files,
 # uploaded assets, provider credentials, and ComfyUI logs. The program creates fresh
@@ -105,7 +105,7 @@ try {
         "$packageName/localdream.exe",
         "$packageName/start-localdream.cmd",
         "$packageName/config.example.cmd",
-        "$packageName/发布说明.md",
+        "$packageName/README.md",
         "$packageName/frontend/dist/index.html",
         "$packageName/templates/h3/workflow.json",
         "$packageName/templates/h3/manifest.json"

@@ -93,6 +93,7 @@ JSON Schema 校验错误由 SDK 返回 `isError: true` 和可读说明，可能�
 
 - `duration` 传用户原始需求，例如 7 秒传 `7`，不要让模型预先补成 `7.29`。普通模板本身将 `round(duration * 24)` 向上对齐到 `17n + 5` 帧：7 秒为 168 帧，对齐为 175 帧，输出约 `175 / 24 = 7.2917` 秒。这是普通工作流的帧数对齐，不是长视频续接补偿；长视频的上下文补帧与裁剪另有逻辑。这里不做精确时长裁剪，自定义工作流也可能有不同对齐规则。
 - `reference_video_fps` 已包含在 `prepare_generation` 的工具 Schema 中。省略或 `null` 默认 7；`0` 使用源帧率；其他允许 1–60（含小数，如 `12.5`）。控制参考视频解码/采样，不改变输出 24 FPS。纯文生模式不使用参考视频，该参数不会产生效果。草稿及任务结果均回显参考 FPS。
+- 内置原生 H3 节点按 24 FPS 解释参考帧序列。需要保留动作时间尺度时，显式传 `24`；直接低帧率抽帧可能缩短模型理解的参考时长。该参数是每秒帧数，不是参考总帧数上限。
 - `resolution` 支持 `480p`（0.4 MP）、`720p`（0.9 MP），也支持 `0.1MP`–`1.9MP` 范围内的自定义十进制字符串，例如 `0.75MP`、`0.98MP`、`1.2MP`。MP 是百万像素，不是长边像素或固定宽高；实际宽高由画面比例及工作流对齐规则决定。
 - 自定义 MP 保留小数精度，不再强制保留一位小数；`0.750MP` 与 `0.75MP` 规范化为同一参数。`get_capabilities.resolutions` 列出预设，自定义范围见 `custom_resolution_mp_range` 和 `custom_resolution_format`。现有 HTTP 创建接口、内置 Agent 与 MCP 共用分辨率校验。
 
@@ -118,5 +119,7 @@ go vet ./...
 
 自动化测试通过官方 MCP 客户端连接临时 HTTP 服务，使用临时数据库和模拟 ComfyUI。
 覆盖草稿持久化/去重、并发提交去重、重启恢复、参数 Schema、项目范围、取消幂等、访问限制，以及现有编译/提交/结果查询的闭环；不消耗真实 GPU。
+
+MCP 的 HTTP 边界、工具、能力探测和测试位于 `internal/app/mcp_*.go`；外部 ComfyUI HTTP 客户端位于 `internal/comfy/`，参考槽位解析位于 `internal/workflow/`。`read_prompt_guide` 的资源来自 `internal/skills/` 的嵌入文件，不能作为普通文档排除。
 
 官方参考：[Go SDK](https://github.com/modelcontextprotocol/go-sdk)、[Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)。

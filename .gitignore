@@ -40,3 +40,12 @@ __pycache__/
 .playwright-cli/
 /output/
 frontend/preview-*.png
+
+# Keep only project READMEs and MCP documentation under version control.
+# The embedded H3 guide is a runtime resource served by MCP, not project notes.
+*.md
+!/README.md
+!/frontend/README.md
+!/packaging/README.md
+!/docs/mcp*.md
+!/internal/skills/builtin/h3-prompt-writing/SKILL.md

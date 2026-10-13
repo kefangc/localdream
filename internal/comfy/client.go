@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"localdream/internal/workflow"
 )
 
 const maxObjectInfoResponseBytes int64 = 4 << 20
@@ -90,26 +88,4 @@ func (c *Client) ObjectInfo(
 	}
 
 	return body, nil
-}
-
-func (c *Client) RuntimeAssetSlots(
-	ctx context.Context,
-	nodeName string,
-) (workflow.RuntimeAssetSlots, error) {
-	raw, err := c.ObjectInfo(ctx, nodeName)
-	if err != nil {
-		return workflow.RuntimeAssetSlots{}, err
-	}
-
-	slots, err := workflow.ParseRuntimeAssetSlots(
-		raw,
-		nodeName,
-	)
-	if err != nil {
-		return workflow.RuntimeAssetSlots{}, fmt.Errorf(
-			"parse ComfyUI runtime asset slots: %w",
-			err,
-		)
-	}
-	return slots, nil
 }
