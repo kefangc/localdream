@@ -3,22 +3,30 @@
 .vscode/
 
 # Go build output
-localdream.exe
-localdream.exe~
+*.exe
+*.exe~
 *.test
 coverage.out
 
 # Frontend dependencies and production output
 frontend/node_modules/
 frontend/dist/
+node_modules/
+# npm dependencies are managed in frontend/, not at the Go project root.
+/package-lock.json
 
 # Runtime state, generated media, and local secrets
-data/assets/
-data/provider.json
-data/*.db
-data/*.sqlite
-data/*.sqlite-*
-data/comfy-backend.log
+/data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.log
+.env
+.env.*
+!.env.example
+!.env.sample
+config.local.cmd
 
 # Locally generated distribution archives.
 release/
@@ -26,7 +34,9 @@ release/
 # Stale interpreter cache from the removed legacy adapter.
 __pycache__/
 *.py[cod]
+/adapter/
 
 # Local browser QA artifacts.
 .playwright-cli/
-output/playwright/
+/output/
+frontend/preview-*.png
